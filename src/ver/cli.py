@@ -60,22 +60,63 @@ def update(args):
         config = read_config(config_path)
         current_sha256 = calculate_sha256(project_dir)
         if config.sha256 == current_sha256:
-            exit("更新はありません", code=0)
+            exit(
+                "更新はありません\n"
+                f'version = "{config.version}"\n'
+                f'sha256 = "{config.sha256}"',
+                code=0,
+            )
         else:
             data = toml.load(config_path)
             data["version"] = next_version(config.version)
             data["sha256"] = current_sha256
             with config_path.open("w", encoding="utf-8") as f:
                 toml.dump(data, f)
-            exit(f"更新されました: {config_path}", code=0)
+            exit(
+                "更新されました\n"
+                f'version = "{data["version"]}"\n'
+                f'sha256 = "{data["sha256"]}"',
+                code=0,
+            )
     except FileNotFoundError:
         exit('エラー: "ver.toml"が見つかりません', code=1)
     except Exception as e:
         exit(f"エラーが発生しました: {e}", code=1)
 
 
-def check(_):
-    pass
+def check(args):
+    """
+    "ver.toml"のversionとsha256が現在の状態と一致するかを確認します。
+    一致する場合は正常終了し、一致しない場合はエラー終了します。
+
+    Args:
+        args.dir: 対象ディレクトリ。指定されていない場合、カレントディレクトリにフォールバックします
+    """
+    try:
+        project_dir = Path.cwd() if args.dir is None else Path(args.dir)
+        if not project_dir.is_dir():
+            raise NotADirectoryError(f"{project_dir} is not a directory")
+
+        config_path = project_dir / VER_TOML
+        config = read_config(config_path)
+        current_sha256 = calculate_sha256(project_dir)
+        if config.sha256 == current_sha256:
+            exit(
+                f'version = "{config.version}"\nsha256 = "{config.sha256}"',
+                code=0,
+            )
+        else:
+            exit(
+                "エラー: 整合していません\n"
+                f'version = "{config.version}"\n'
+                f'sha256 = "{config.sha256}"\n'
+                f'actual_sha256 = "{current_sha256}"',
+                code=1,
+            )
+    except FileNotFoundError:
+        exit('エラー: "ver.toml"が見つかりません', code=1)
+    except Exception as e:
+        exit(f"エラーが発生しました: {e}", code=1)
 
 
 def main():
@@ -113,7 +154,16 @@ def main():
     )
     update_parser.set_defaults(handler=update)
 
-    s.add_parser("check").set_defaults(handler=check)
+    check_parser = s.add_parser(
+        "check", help='"ver.toml"のversionとsha256が現在の状態と一致するかを確認します'
+    )
+    check_parser.add_argument(
+        "dir",
+        nargs="?",
+        default=None,
+        help="対象ディレクトリ。指定されていない場合、カレントディレクトリにフォールバックします",
+    )
+    check_parser.set_defaults(handler=check)
 
     args = p.parse_args()
     if hasattr(args, "handler"):
