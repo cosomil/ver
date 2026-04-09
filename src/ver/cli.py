@@ -33,6 +33,7 @@ def init(args):
             "name": args.name or project_dir.name,
             "version": next_version() if args.version else "undefined",
             "sha256": calculate_sha256(project_dir) if args.version else "",
+            "meta": {},
         }
         with config_path.open("x", encoding="utf-8") as f:
             toml.dump(data, f)
