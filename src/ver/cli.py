@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 import sys
 
-import toml
+import tomlkit
 
 from ver.calver import next_version
 from ver.config import VER_TOML, read_config
@@ -33,10 +33,13 @@ def init(args):
             "name": args.name or project_dir.name,
             "version": next_version() if args.version else "undefined",
             "sha256": calculate_sha256(project_dir) if args.version else "",
-            "meta": {},
         }
+        doc = tomlkit.document()
+        for key, value in data.items():
+            doc[key] = value
+        doc["meta"] = tomlkit.table()
         with config_path.open("x", encoding="utf-8") as f:
-            toml.dump(data, f)
+            tomlkit.dump(doc, f)
         exit(f"作成されました: {config_path}", code=0)
     except FileExistsError:
         exit('エラー: "ver.toml"が既に存在しています', code=1)
@@ -68,11 +71,12 @@ def update(args):
                 code=0,
             )
         else:
-            data = toml.load(config_path)
+            with config_path.open(encoding="utf-8") as f:
+                data = tomlkit.load(f)
             data["version"] = next_version(config.version)
             data["sha256"] = current_sha256
             with config_path.open("w", encoding="utf-8") as f:
-                toml.dump(data, f)
+                tomlkit.dump(data, f)
             exit(
                 "更新されました\n"
                 f'version = "{data["version"]}"\n'

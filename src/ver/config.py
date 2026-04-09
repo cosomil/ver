@@ -1,8 +1,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
+import tomllib
 from typing import Any
-
-import toml
 
 from ver.root import find_root_dir
 
@@ -25,7 +24,8 @@ def read_config(path: str | Path | None = None) -> Config:
         path = Path(path)
         if path.is_dir():
             path = path / VER_TOML
-    data = toml.load(path)
+    with path.open("rb") as f:
+        data = tomllib.load(f)
     missing_fields = [field for field in REQUIRED_FIELDS if field not in data]
     if missing_fields:
         missing = ", ".join(missing_fields)

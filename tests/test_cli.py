@@ -67,6 +67,36 @@ def test_main_update_updates_existing_ver_toml(tmp_path, monkeypatch, capsys):
     )
 
 
+def test_main_update_preserves_comments_and_meta_table(tmp_path, monkeypatch):
+    project_dir = tmp_path / "service"
+    project_dir.mkdir()
+    (project_dir / "main.py").write_text("print('hello')\n")
+    config_path = project_dir / "ver.toml"
+    config_path.write_text(
+        '# user comment\n'
+        'name = "api"\n'
+        'version = "2026.04.09.0" # version comment\n'
+        'sha256 = "old"\n'
+        '\n'
+        '[meta]\n'
+        '# keep this comment\n'
+        'owner = "user"\n'
+    )
+    monkeypatch.setattr(cli_module, "next_version", lambda current_ver: "2026.04.09.1")
+    monkeypatch.setattr(sys, "argv", ["ver", "update", str(project_dir)])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    updated = config_path.read_text()
+    assert exc_info.value.code == 0
+    assert '# user comment' in updated
+    assert '# version comment' in updated
+    assert '[meta]' in updated
+    assert '# keep this comment' in updated
+    assert 'owner = "user"' in updated
+
+
 def test_main_update_exits_without_changes_when_sha256_is_unchanged(
     tmp_path, monkeypatch, capsys
 ):
