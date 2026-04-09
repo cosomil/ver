@@ -71,7 +71,7 @@ def test_main_init_with_version_fails_outside_git_worktree(
         main()
 
     assert exc_info.value.code == 1
-    assert "is not inside a git worktree" in capsys.readouterr().err
+    assert "gitで管理されていないディレクトリ" in capsys.readouterr().err
 
 
 def test_main_update_updates_existing_ver_toml(tmp_path, monkeypatch, capsys):

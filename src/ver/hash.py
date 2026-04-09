@@ -8,7 +8,6 @@ from typing import Literal, Pattern, Sequence, assert_never
 
 from ver.config import VER_TOML
 
-
 HashCalculationErrorReason = Literal[
     "not_git_worktree",
     "missing_uv_lock",
@@ -21,7 +20,7 @@ class HashCalculationError(RuntimeError):
     root: Path
 
     def __init__(self, reason: HashCalculationErrorReason, root: Path):
-        self._reason = reason
+        self.reason = reason
         self.root = root
         super().__init__(self._build_message())
 
@@ -86,7 +85,8 @@ def calculate_sha256(
 ) -> str:
     """
     指定されたディレクトリ配下のgit管理ファイルと未追跡ファイルからSHA-256ハッシュを計算する。
-    ver.toml は常に除外し、uv.lock は除外パターンでは除外しない。
+    ver.toml は常に計算対象から除外する。
+    uv.lock は必ず計算対象となる。
     """
     root = Path(dir)
     if not root.is_dir():

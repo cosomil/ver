@@ -9,6 +9,14 @@ from ver.config import VER_TOML, read_config
 from ver.hash import HashCalculationError, calculate_sha256
 
 
+DEFAULT_EXCLUDE_PATTERNS = (
+    r"^\.[^/]+$",
+    r"^tests/",
+    r"^(README\.md|AGENTS\.md|CLAUDE\.md)$",
+    r"^LICENSE\.(txt|md|rst)$",
+)
+
+
 def exit(message: str, code: int = 1):
     print(message, file=sys.stdout if code == 0 else sys.stderr)
     return SystemExit(code)
@@ -32,7 +40,11 @@ def init(args):
         data = {
             "name": args.name or project_dir.name,
             "version": next_version() if args.version else "undefined",
-            "sha256": calculate_sha256(project_dir) if args.version else "",
+            "sha256": (
+                calculate_sha256(project_dir, DEFAULT_EXCLUDE_PATTERNS)
+                if args.version
+                else ""
+            ),
         }
         doc = tomlkit.document()
         for key, value in data.items():
@@ -82,7 +94,7 @@ def update(args):
         raise exit(f"エラーが発生しました: {e}", code=1)
 
     try:
-        current_sha256 = calculate_sha256(project_dir)
+        current_sha256 = calculate_sha256(project_dir, DEFAULT_EXCLUDE_PATTERNS)
         if config.sha256 == current_sha256:
             raise exit(
                 "更新はありません\n"
@@ -136,7 +148,7 @@ def check(args):
 
         config_path = project_dir / VER_TOML
         config = read_config(config_path)
-        current_sha256 = calculate_sha256(project_dir)
+        current_sha256 = calculate_sha256(project_dir, DEFAULT_EXCLUDE_PATTERNS)
         if config.sha256 == current_sha256:
             raise exit(
                 f'version = "{config.version}"\nsha256 = "{config.sha256}"',
