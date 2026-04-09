@@ -5,13 +5,29 @@ import sys
 import tomlkit
 
 from ver.calver import next_version
-from ver.config import VER_TOML, read_config
-from ver.hash import calculate_sha256
+from ver.config import Config, VER_TOML, read_config, read_head_config
+from ver.hash import HashCalculationError, calculate_sha256
+
+
+DEFAULT_EXCLUDE_PATTERNS = (
+    r"^\.[^/]+$",
+    r"^tests/",
+    r"^(README\.md|AGENTS\.md|CLAUDE\.md)$",
+    r"^LICENSE\.(txt|md|rst)$",
+)
+
+
+def resolve_exclude_patterns(config: Config | None = None) -> tuple[str, ...]:
+    if config is None:
+        return DEFAULT_EXCLUDE_PATTERNS
+    if config.no_default_exclude_patterns:
+        return tuple(config.exclude_patterns)
+    return (*DEFAULT_EXCLUDE_PATTERNS, *config.exclude_patterns)
 
 
 def exit(message: str, code: int = 1):
     print(message, file=sys.stdout if code == 0 else sys.stderr)
-    sys.exit(code)
+    return SystemExit(code)
 
 
 def init(args):
@@ -32,19 +48,39 @@ def init(args):
         data = {
             "name": args.name or project_dir.name,
             "version": next_version() if args.version else "undefined",
-            "sha256": calculate_sha256(project_dir) if args.version else "",
+            "sha256": (
+                calculate_sha256(project_dir, resolve_exclude_patterns())
+                if args.version
+                else ""
+            ),
+            "exclude_patterns": [],
+            "no_default_exclude_patterns": False,
+            "meta": tomlkit.table(),
         }
         doc = tomlkit.document()
         for key, value in data.items():
             doc[key] = value
-        doc["meta"] = tomlkit.table()
         with config_path.open("x", encoding="utf-8") as f:
             tomlkit.dump(doc, f)
-        exit(f"作成されました: {config_path}", code=0)
+        raise exit(f"作成されました: {config_path}", code=0)
     except FileExistsError:
-        exit('エラー: "ver.toml"が既に存在しています', code=1)
+        raise exit('エラー: "ver.toml"が既に存在しています', code=1)
+    except HashCalculationError as e:
+        match e.reason:
+            case "missing_uv_lock":
+                raise exit("エラー: uv.lock が見つかりません", code=1)
+            case "not_git_worktree":
+                raise exit(
+                    f"エラー: gitで管理されていないディレクトリのハッシュ値を計算することができません: {e.root}",
+                    code=1,
+                )
+            case "uv_lock_not_in_git_ls_files":
+                raise exit(
+                    f'エラー: "uv.lock"がgitで管理されていないためハッシュ値を計算することができません: {e.root}',
+                    code=1,
+                )
     except Exception as e:
-        exit(f"エラーが発生しました: {e}", code=1)
+        raise exit(f"エラーが発生しました: {e}", code=1)
 
 
 def update(args):
@@ -62,31 +98,51 @@ def update(args):
 
         config_path = project_dir / VER_TOML
         config = read_config(config_path)
-        current_sha256 = calculate_sha256(project_dir)
+    except FileNotFoundError:
+        raise exit('エラー: "ver.toml"が見つかりません', code=1)
+    except Exception as e:
+        raise exit(f"エラーが発生しました: {e}", code=1)
+
+    try:
+        current_sha256 = calculate_sha256(project_dir, resolve_exclude_patterns(config))
         if config.sha256 == current_sha256:
-            exit(
+            raise exit(
                 "更新はありません\n"
                 f'version = "{config.version}"\n'
                 f'sha256 = "{config.sha256}"',
                 code=0,
             )
         else:
+            head_config = read_head_config(config_path)
+            base_version = None if head_config is None else head_config.version
             with config_path.open(encoding="utf-8") as f:
                 data = tomlkit.load(f)
-            data["version"] = next_version(config.version)
+            data["version"] = next_version(base_version)
             data["sha256"] = current_sha256
             with config_path.open("w", encoding="utf-8") as f:
                 tomlkit.dump(data, f)
-            exit(
+            raise exit(
                 "更新されました\n"
                 f'version = "{data["version"]}"\n'
                 f'sha256 = "{data["sha256"]}"',
                 code=0,
             )
-    except FileNotFoundError:
-        exit('エラー: "ver.toml"が見つかりません', code=1)
+    except HashCalculationError as e:
+        match e.reason:
+            case "missing_uv_lock":
+                raise exit("エラー: uv.lock が見つかりません", code=1)
+            case "not_git_worktree":
+                raise exit(
+                    f"エラー: gitで管理されていないディレクトリのハッシュ値を計算することができません: {e.root}",
+                    code=1,
+                )
+            case "uv_lock_not_in_git_ls_files":
+                raise exit(
+                    f'エラー: "uv.lock"がgitで管理されていないためハッシュ値を計算することができません: {e.root}',
+                    code=1,
+                )
     except Exception as e:
-        exit(f"エラーが発生しました: {e}", code=1)
+        raise exit(f"エラーが発生しました: {e}", code=1)
 
 
 def check(args):
@@ -104,14 +160,14 @@ def check(args):
 
         config_path = project_dir / VER_TOML
         config = read_config(config_path)
-        current_sha256 = calculate_sha256(project_dir)
+        current_sha256 = calculate_sha256(project_dir, resolve_exclude_patterns(config))
         if config.sha256 == current_sha256:
-            exit(
+            raise exit(
                 f'version = "{config.version}"\nsha256 = "{config.sha256}"',
                 code=0,
             )
         else:
-            exit(
+            raise exit(
                 "エラー: 整合していません\n"
                 f'version = "{config.version}"\n'
                 f'sha256 = "{config.sha256}"\n'
@@ -119,13 +175,17 @@ def check(args):
                 code=1,
             )
     except FileNotFoundError:
-        exit('エラー: "ver.toml"が見つかりません', code=1)
+        raise exit('エラー: "ver.toml"が見つかりません', code=1)
     except Exception as e:
-        exit(f"エラーが発生しました: {e}", code=1)
+        raise exit(f"エラーが発生しました: {e}", code=1)
 
 
 def main():
-    p = argparse.ArgumentParser(prog="ver", description="A CLI tool for ver")
+    p = argparse.ArgumentParser(
+        prog="ver",
+        description="プロジェクトのバージョンの管理、検査を行います。\n"
+        "対象のプロジェクトはuvで作成され、gitで管理されている必要があります",
+    )
     s = p.add_subparsers()
 
     # ver init [dir] --name NAME --version
@@ -148,6 +208,7 @@ def main():
     )
     init_parser.set_defaults(handler=init)
 
+    # ver update [dir]
     update_parser = s.add_parser(
         "update", help='"ver.toml"のversionを更新し、sha256を再計算します'
     )
@@ -159,6 +220,7 @@ def main():
     )
     update_parser.set_defaults(handler=update)
 
+    # ver check [dir]
     check_parser = s.add_parser(
         "check", help='"ver.toml"のversionとsha256が現在の状態と一致するかを確認します'
     )

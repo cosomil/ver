@@ -31,6 +31,22 @@ def test_read_config_reads_ver_toml_from_directory(tmp_path):
     assert config.sha256 == "def456"
 
 
+def test_read_config_reads_optional_exclude_settings(tmp_path):
+    config_path = tmp_path / "ver.toml"
+    config_path.write_text(
+        'name = "example"\n'
+        'version = "2026.04.09.0"\n'
+        'sha256 = "abc123"\n'
+        'exclude_patterns = ["^dist/", "^coverage\\\\.xml$"]\n'
+        "no_default_exclude_patterns = true\n"
+    )
+
+    config = read_config(config_path)
+
+    assert config.exclude_patterns == ["^dist/", "^coverage\\.xml$"]
+    assert config.no_default_exclude_patterns is True
+
+
 def test_read_config_ignores_unknown_top_level_keys(tmp_path):
     config_path = tmp_path / "ver.toml"
     config_path.write_text(
@@ -59,5 +75,20 @@ def test_read_config_reports_multiple_missing_required_fields(tmp_path):
 
     with pytest.raises(
         ValueError, match=r"Missing required fields .*: version, sha256"
+    ):
+        read_config(config_path)
+
+
+def test_read_config_validates_optional_exclude_settings(tmp_path):
+    config_path = tmp_path / "ver.toml"
+    config_path.write_text(
+        'name = "example"\n'
+        'version = "2026.04.09.0"\n'
+        'sha256 = "abc123"\n'
+        "exclude_patterns = [1]\n"
+    )
+
+    with pytest.raises(
+        ValueError, match=r"exclude_patterns .* must be an array of strings"
     ):
         read_config(config_path)
