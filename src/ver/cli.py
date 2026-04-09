@@ -1,6 +1,17 @@
 import argparse
+from pathlib import Path
+import sys
 
-from ver.config import init_config
+import toml
+
+from ver.calver import next_version
+from ver.config import VER_TOML, read_config
+from ver.hash import calculate_sha256
+
+
+def exit(message: str, code: int = 1):
+    print(message, file=sys.stdout if code == 0 else sys.stderr)
+    sys.exit(code)
 
 
 def init(args):
@@ -11,20 +22,60 @@ def init(args):
         args.dir: 対象ディレクトリ。指定されていない場合、カレントディレクトリにフォールバックします
         args.name: プロジェクト名。省略した場合はディレクトリ名を使用します
         args.version: バージョン生成とSHA-256ハッシュ計算を行うかどうか。省略した場合、version は "undefined"、sha256 は空文字になります
-
-    Raises:
-        FileExistsError: すでに"ver.toml"が存在する場合に発生
     """
-    config_path = init_config(args.dir, name=args.name, with_version=args.version)
-    print(f"作成されました: {config_path}")
+    try:
+        project_dir = Path.cwd() if args.dir is None else Path(args.dir)
+        if not project_dir.is_dir():
+            raise NotADirectoryError(f"{project_dir} is not a directory")
+
+        config_path = project_dir / VER_TOML
+        data = {
+            "name": args.name or project_dir.name,
+            "version": next_version() if args.version else "undefined",
+            "sha256": calculate_sha256(project_dir) if args.version else "",
+        }
+        with config_path.open("x", encoding="utf-8") as f:
+            toml.dump(data, f)
+        exit(f"作成されました: {config_path}", code=0)
+    except FileExistsError:
+        exit('エラー: "ver.toml"が既に存在しています', code=1)
+    except Exception as e:
+        exit(f"エラーが発生しました: {e}", code=1)
 
 
-def update(_):
-    print("Updating ver project...")
+def update(args):
+    """
+    "ver.toml"のversionを更新し、sha256を再計算します。
+    ただし、sha256に変更がない場合は更新せずに終了します。
+
+    Args:
+        args.dir: 対象ディレクトリ。指定されていない場合、カレントディレクトリにフォールバックします
+    """
+    try:
+        project_dir = Path.cwd() if args.dir is None else Path(args.dir)
+        if not project_dir.is_dir():
+            raise NotADirectoryError(f"{project_dir} is not a directory")
+
+        config_path = project_dir / VER_TOML
+        config = read_config(config_path)
+        current_sha256 = calculate_sha256(project_dir)
+        if config.sha256 == current_sha256:
+            exit("更新はありません", code=0)
+        else:
+            data = toml.load(config_path)
+            data["version"] = next_version(config.version)
+            data["sha256"] = current_sha256
+            with config_path.open("w", encoding="utf-8") as f:
+                toml.dump(data, f)
+            exit(f"更新されました: {config_path}", code=0)
+    except FileNotFoundError:
+        exit('エラー: "ver.toml"が見つかりません', code=1)
+    except Exception as e:
+        exit(f"エラーが発生しました: {e}", code=1)
 
 
 def check(_):
-    print("Checking ver project...")
+    pass
 
 
 def main():
@@ -51,7 +102,16 @@ def main():
     )
     init_parser.set_defaults(handler=init)
 
-    s.add_parser("update").set_defaults(handler=update)
+    update_parser = s.add_parser(
+        "update", help='"ver.toml"のversionを更新し、sha256を再計算します'
+    )
+    update_parser.add_argument(
+        "dir",
+        nargs="?",
+        default=None,
+        help="対象ディレクトリ。指定されていない場合、カレントディレクトリにフォールバックします",
+    )
+    update_parser.set_defaults(handler=update)
 
     s.add_parser("check").set_defaults(handler=check)
 
