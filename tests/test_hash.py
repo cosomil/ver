@@ -17,6 +17,20 @@ def init_git_repo(root: Path) -> None:
     git(root, "init", "-q")
 
 
+def commit_all(root: Path, message: str) -> None:
+    git(root, "add", "--all")
+    git(
+        root,
+        "-c",
+        "user.name=Test User",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        message,
+    )
+
+
 def test_calculate_sha256_hashes_tracked_and_untracked_files(tmp_path: Path):
     root = tmp_path / "project"
     init_git_repo(root)
@@ -213,6 +227,80 @@ def test_calculate_sha256_skips_deleted_tracked_files(tmp_path: Path):
         expected.update(b"\0")
         expected.update((root / relative_path).read_bytes())
         expected.update(b"\0")
+
+    assert calculate_sha256(root) == expected.hexdigest()
+
+
+def test_calculate_sha256_hashes_submodule_using_checked_out_revision(tmp_path: Path):
+    submodule_repo = tmp_path / "submodule"
+    init_git_repo(submodule_repo)
+    (submodule_repo / "file.txt").write_text("v1\n")
+    commit_all(submodule_repo, "v1")
+    revision1 = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=submodule_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    (submodule_repo / "file.txt").write_text("v2\n")
+    commit_all(submodule_repo, "v2")
+    revision2 = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=submodule_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    root = tmp_path / "project"
+    init_git_repo(root)
+    git(
+        root,
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "-q",
+        str(submodule_repo),
+        "deps/sub",
+    )
+    (root / "uv.lock").write_text("lock-content\n")
+    git(root / "deps" / "sub", "checkout", "-q", revision1)
+    git(root, "add", "--", ".gitmodules", "deps/sub", "uv.lock")
+
+    expected = hashlib.sha256()
+    expected.update(b".gitmodules")
+    expected.update(b"\0")
+    expected.update((root / ".gitmodules").read_bytes())
+    expected.update(b"\0")
+    expected.update(b"deps/sub")
+    expected.update(b"\0")
+    expected.update(revision1.encode())
+    expected.update(b"\0")
+    expected.update(b"uv.lock")
+    expected.update(b"\0")
+    expected.update((root / "uv.lock").read_bytes())
+    expected.update(b"\0")
+
+    assert calculate_sha256(root) == expected.hexdigest()
+
+    git(root / "deps" / "sub", "checkout", "-q", revision2)
+
+    expected = hashlib.sha256()
+    expected.update(b".gitmodules")
+    expected.update(b"\0")
+    expected.update((root / ".gitmodules").read_bytes())
+    expected.update(b"\0")
+    expected.update(b"deps/sub")
+    expected.update(b"\0")
+    expected.update(revision2.encode())
+    expected.update(b"\0")
+    expected.update(b"uv.lock")
+    expected.update(b"\0")
+    expected.update((root / "uv.lock").read_bytes())
+    expected.update(b"\0")
 
     assert calculate_sha256(root) == expected.hexdigest()
 
