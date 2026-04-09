@@ -19,5 +19,9 @@ class Config(BaseModel):
 def read_config(path: str | Path | None = None) -> Config:
     if path is None:
         path = find_root_dir() / VER_TOML
+    else:
+        path = Path(path)
+        if path.is_dir():
+            path = path / VER_TOML
     data = toml.load(path)
     return Config(**data)
