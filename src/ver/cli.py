@@ -5,7 +5,7 @@ import sys
 import tomlkit
 
 from ver.calver import next_version
-from ver.config import VER_TOML, read_config
+from ver.config import Config, VER_TOML, read_config
 from ver.hash import HashCalculationError, calculate_sha256
 
 
@@ -15,6 +15,14 @@ DEFAULT_EXCLUDE_PATTERNS = (
     r"^(README\.md|AGENTS\.md|CLAUDE\.md)$",
     r"^LICENSE\.(txt|md|rst)$",
 )
+
+
+def resolve_exclude_patterns(config: Config | None = None) -> tuple[str, ...]:
+    if config is None:
+        return DEFAULT_EXCLUDE_PATTERNS
+    if config.no_default_exclude_patterns:
+        return tuple(config.exclude_patterns)
+    return (*DEFAULT_EXCLUDE_PATTERNS, *config.exclude_patterns)
 
 
 def exit(message: str, code: int = 1):
@@ -41,15 +49,17 @@ def init(args):
             "name": args.name or project_dir.name,
             "version": next_version() if args.version else "undefined",
             "sha256": (
-                calculate_sha256(project_dir, DEFAULT_EXCLUDE_PATTERNS)
+                calculate_sha256(project_dir, resolve_exclude_patterns())
                 if args.version
                 else ""
             ),
+            "exclude_patterns": [],
+            "no_default_exclude_patterns": False,
+            "meta": tomlkit.table(),
         }
         doc = tomlkit.document()
         for key, value in data.items():
             doc[key] = value
-        doc["meta"] = tomlkit.table()
         with config_path.open("x", encoding="utf-8") as f:
             tomlkit.dump(doc, f)
         raise exit(f"作成されました: {config_path}", code=0)
@@ -94,7 +104,7 @@ def update(args):
         raise exit(f"エラーが発生しました: {e}", code=1)
 
     try:
-        current_sha256 = calculate_sha256(project_dir, DEFAULT_EXCLUDE_PATTERNS)
+        current_sha256 = calculate_sha256(project_dir, resolve_exclude_patterns(config))
         if config.sha256 == current_sha256:
             raise exit(
                 "更新はありません\n"
@@ -148,7 +158,7 @@ def check(args):
 
         config_path = project_dir / VER_TOML
         config = read_config(config_path)
-        current_sha256 = calculate_sha256(project_dir, DEFAULT_EXCLUDE_PATTERNS)
+        current_sha256 = calculate_sha256(project_dir, resolve_exclude_patterns(config))
         if config.sha256 == current_sha256:
             raise exit(
                 f'version = "{config.version}"\nsha256 = "{config.sha256}"',

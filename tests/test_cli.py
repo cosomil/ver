@@ -189,3 +189,60 @@ def test_main_check_fails_when_sha256_differs(tmp_path, monkeypatch, capsys):
         'sha256 = "old"\n'
         f'actual_sha256 = "{recalculated_sha256}"\n'
     )
+
+
+def test_main_check_respects_configured_exclude_patterns(
+    tmp_path, monkeypatch, capsys
+):
+    project_dir = tmp_path / "service"
+    init_versioned_project(project_dir)
+    (project_dir / "generated.txt").write_text("ignore me\n")
+    git(project_dir, "add", "--", "generated.txt")
+    sha256 = cli_module.calculate_sha256(project_dir, [r"^generated\.txt$"])
+    (project_dir / "ver.toml").write_text(
+        'name = "api"\n'
+        'version = "2026.04.09.0"\n'
+        f'sha256 = "{sha256}"\n'
+        'exclude_patterns = ["^generated\\\\.txt$"]\n'
+    )
+    monkeypatch.setattr(sys, "argv", ["ver", "check", str(project_dir)])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out == f'version = "2026.04.09.0"\nsha256 = "{sha256}"\n'
+
+
+def test_main_update_respects_no_default_exclude_patterns(
+    tmp_path, monkeypatch, capsys
+):
+    project_dir = tmp_path / "service"
+    init_versioned_project(project_dir)
+    (project_dir / "README.md").write_text("# include me\n")
+    git(project_dir, "add", "--", "README.md")
+    expected_sha256 = cli_module.calculate_sha256(project_dir)
+    assert expected_sha256 != cli_module.calculate_sha256(
+        project_dir, cli_module.DEFAULT_EXCLUDE_PATTERNS
+    )
+    (project_dir / "ver.toml").write_text(
+        'name = "api"\n'
+        'version = "2026.04.09.0"\n'
+        'sha256 = "old"\n'
+        "no_default_exclude_patterns = true\n"
+    )
+    monkeypatch.setattr(cli_module, "next_version", lambda current_ver: "2026.04.09.1")
+    monkeypatch.setattr(sys, "argv", ["ver", "update", str(project_dir)])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    config = read_config(project_dir / "ver.toml")
+    assert exc_info.value.code == 0
+    assert config.version == "2026.04.09.1"
+    assert config.sha256 == expected_sha256
+    assert (
+        capsys.readouterr().out == "更新されました\n"
+        'version = "2026.04.09.1"\n'
+        f'sha256 = "{expected_sha256}"\n'
+    )
