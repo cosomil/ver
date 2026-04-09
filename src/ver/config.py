@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
+import subprocess
 import tomllib
 from typing import Any
 
@@ -19,15 +21,18 @@ class Config:
     meta: dict[str, Any] = field(default_factory=dict)
 
 
-def read_config(path: str | Path | None = None) -> Config:
+def _resolve_config_path(path: str | Path | None = None) -> Path:
     if path is None:
-        path = find_root_dir() / VER_TOML
-    else:
-        path = Path(path)
-        if path.is_dir():
-            path = path / VER_TOML
-    with path.open("rb") as f:
-        data = tomllib.load(f)
+        return find_root_dir() / VER_TOML
+
+    path = Path(path)
+    if path.is_dir():
+        return path / VER_TOML
+
+    return path
+
+
+def _config_from_data(data: dict[str, Any], path: Path) -> Config:
     missing_fields = [field for field in REQUIRED_FIELDS if field not in data]
     if missing_fields:
         missing = ", ".join(missing_fields)
@@ -56,3 +61,49 @@ def read_config(path: str | Path | None = None) -> Config:
         no_default_exclude_patterns=no_default_exclude_patterns,
         meta=meta,
     )
+
+
+def read_config(path: str | Path | None = None) -> Config:
+    resolved = _resolve_config_path(path)
+    with resolved.open("rb") as f:
+        data = tomllib.load(f)
+    return _config_from_data(data, resolved)
+
+
+def read_head_config(path: str | Path | None = None) -> Config | None:
+    resolved = _resolve_config_path(path)
+
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=resolved.parent,
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError:
+        return None
+
+    git_root = Path(os.fsdecode(completed.stdout).strip())
+    try:
+        git_path = resolved.resolve().relative_to(git_root.resolve()).as_posix()
+    except ValueError:
+        return None
+
+    try:
+        subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"HEAD:{git_path}"],
+            cwd=resolved.parent,
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError:
+        return None
+
+    completed = subprocess.run(
+        ["git", "show", f"HEAD:{git_path}"],
+        cwd=resolved.parent,
+        check=True,
+        capture_output=True,
+    )
+    data = tomllib.loads(os.fsdecode(completed.stdout))
+    return _config_from_data(data, resolved)

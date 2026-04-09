@@ -5,7 +5,7 @@ import sys
 import tomlkit
 
 from ver.calver import next_version
-from ver.config import Config, VER_TOML, read_config
+from ver.config import Config, VER_TOML, read_config, read_head_config
 from ver.hash import HashCalculationError, calculate_sha256
 
 
@@ -113,9 +113,11 @@ def update(args):
                 code=0,
             )
         else:
+            head_config = read_head_config(config_path)
+            base_version = None if head_config is None else head_config.version
             with config_path.open(encoding="utf-8") as f:
                 data = tomlkit.load(f)
-            data["version"] = next_version(config.version)
+            data["version"] = next_version(base_version)
             data["sha256"] = current_sha256
             with config_path.open("w", encoding="utf-8") as f:
                 tomlkit.dump(data, f)

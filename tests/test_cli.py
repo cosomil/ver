@@ -80,7 +80,13 @@ def test_main_update_updates_existing_ver_toml(tmp_path, monkeypatch, capsys):
     (project_dir / "ver.toml").write_text(
         'name = "api"\nversion = "2026.04.09.0"\nsha256 = "old"\n'
     )
-    monkeypatch.setattr(cli_module, "next_version", lambda current_ver: "2026.04.09.1")
+    calls = []
+
+    def fake_next_version(current_ver=None):
+        calls.append(current_ver)
+        return "2026.04.09.1"
+
+    monkeypatch.setattr(cli_module, "next_version", fake_next_version)
     monkeypatch.setattr(sys, "argv", ["ver", "update", str(project_dir)])
 
     with pytest.raises(SystemExit) as exc_info:
@@ -88,6 +94,7 @@ def test_main_update_updates_existing_ver_toml(tmp_path, monkeypatch, capsys):
 
     config = read_config(project_dir / "ver.toml")
     assert exc_info.value.code == 0
+    assert calls == [None]
     assert config.version == "2026.04.09.1"
     assert config.sha256 != "old"
     assert (
@@ -111,7 +118,9 @@ def test_main_update_preserves_comments_and_meta_table(tmp_path, monkeypatch):
         "# keep this comment\n"
         'owner = "user"\n'
     )
-    monkeypatch.setattr(cli_module, "next_version", lambda current_ver: "2026.04.09.1")
+    monkeypatch.setattr(
+        cli_module, "next_version", lambda current_ver=None: "2026.04.09.1"
+    )
     monkeypatch.setattr(sys, "argv", ["ver", "update", str(project_dir)])
 
     with pytest.raises(SystemExit) as exc_info:
@@ -151,6 +160,61 @@ def test_main_update_exits_without_changes_when_sha256_is_unchanged(
         capsys.readouterr().out == "更新はありません\n"
         f'version = "2026.04.09.0"\n'
         f'sha256 = "{sha256}"\n'
+    )
+
+
+def test_main_update_uses_head_version_when_ver_toml_has_uncommitted_changes(
+    tmp_path, monkeypatch, capsys
+):
+    project_dir = tmp_path / "service"
+    init_versioned_project(project_dir)
+    config_path = project_dir / "ver.toml"
+    head_sha256 = cli_module.calculate_sha256(project_dir)
+    config_path.write_text(
+        'name = "api"\n'
+        'version = "2026.04.09.0"\n'
+        f'sha256 = "{head_sha256}"\n'
+    )
+    git(project_dir, "add", "--", "ver.toml")
+    git(
+        project_dir,
+        "-c",
+        "user.name=Test User",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "initial version",
+    )
+
+    (project_dir / "main.py").write_text("print('hello v2')\n")
+    stale_sha256 = cli_module.calculate_sha256(project_dir)
+    config_path.write_text(
+        'name = "api"\n'
+        'version = "2026.04.09.1"\n'
+        f'sha256 = "{stale_sha256}"\n'
+    )
+    (project_dir / "main.py").write_text("print('hello v3')\n")
+
+    def fake_next_version(current_ver):
+        assert current_ver == "2026.04.09.0"
+        return "2026.04.09.1"
+
+    monkeypatch.setattr(cli_module, "next_version", fake_next_version)
+    monkeypatch.setattr(sys, "argv", ["ver", "update", str(project_dir)])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    expected_sha256 = cli_module.calculate_sha256(project_dir)
+    config = read_config(config_path)
+    assert exc_info.value.code == 0
+    assert config.version == "2026.04.09.1"
+    assert config.sha256 == expected_sha256
+    assert (
+        capsys.readouterr().out == "更新されました\n"
+        'version = "2026.04.09.1"\n'
+        f'sha256 = "{expected_sha256}"\n'
     )
 
 
@@ -231,7 +295,9 @@ def test_main_update_respects_no_default_exclude_patterns(
         'sha256 = "old"\n'
         "no_default_exclude_patterns = true\n"
     )
-    monkeypatch.setattr(cli_module, "next_version", lambda current_ver: "2026.04.09.1")
+    monkeypatch.setattr(
+        cli_module, "next_version", lambda current_ver=None: "2026.04.09.1"
+    )
     monkeypatch.setattr(sys, "argv", ["ver", "update", str(project_dir)])
 
     with pytest.raises(SystemExit) as exc_info:
