@@ -30,6 +30,11 @@ def exit(message: str, code: int = 1):
     return SystemExit(code)
 
 
+def load_template() -> tomlkit.TOMLDocument:
+    template_path = Path(__file__).with_name("template.toml")
+    return tomlkit.parse(template_path.read_text(encoding="utf-8"))
+
+
 def init(args):
     """
     ディレクトリに新しく"ver.toml"を作成します。
@@ -45,21 +50,14 @@ def init(args):
             raise NotADirectoryError(f"{project_dir} is not a directory")
 
         config_path = project_dir / VER_TOML
-        data = {
-            "name": args.name or project_dir.name,
-            "version": next_version() if args.version else "undefined",
-            "sha256": (
-                calculate_sha256(project_dir, resolve_exclude_patterns())
-                if args.version
-                else ""
-            ),
-            "exclude_patterns": [],
-            "no_default_exclude_patterns": False,
-            "meta": tomlkit.table(),
-        }
-        doc = tomlkit.document()
-        for key, value in data.items():
-            doc[key] = value
+        doc = load_template()
+        doc["name"] = args.name or project_dir.name
+        doc["version"] = next_version() if args.version else "undefined"
+        doc["sha256"] = (
+            calculate_sha256(project_dir, resolve_exclude_patterns())
+            if args.version
+            else ""
+        )
         with config_path.open("x", encoding="utf-8") as f:
             tomlkit.dump(doc, f)
         raise exit(f"作成されました: {config_path}", code=0)
