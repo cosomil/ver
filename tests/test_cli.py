@@ -32,7 +32,7 @@ def test_main_init_creates_ver_toml_for_current_directory(
     config = read_config(tmp_path / "ver.toml")
     assert exc_info.value.code == 0
     assert config.name == tmp_path.name
-    assert config.version == "undefined"
+    assert config.version == ""
     assert config.sha256 == ""
     assert "作成されました" in capsys.readouterr().out
 
@@ -171,9 +171,7 @@ def test_main_update_uses_head_version_when_ver_toml_has_uncommitted_changes(
     config_path = project_dir / "ver.toml"
     head_sha256 = cli_module.calculate_sha256(project_dir)
     config_path.write_text(
-        'name = "api"\n'
-        'version = "2026.04.09.0"\n'
-        f'sha256 = "{head_sha256}"\n'
+        f'name = "api"\nversion = "2026.04.09.0"\nsha256 = "{head_sha256}"\n'
     )
     git(project_dir, "add", "--", "ver.toml")
     git(
@@ -190,9 +188,7 @@ def test_main_update_uses_head_version_when_ver_toml_has_uncommitted_changes(
     (project_dir / "main.py").write_text("print('hello v2')\n")
     stale_sha256 = cli_module.calculate_sha256(project_dir)
     config_path.write_text(
-        'name = "api"\n'
-        'version = "2026.04.09.1"\n'
-        f'sha256 = "{stale_sha256}"\n'
+        f'name = "api"\nversion = "2026.04.09.1"\nsha256 = "{stale_sha256}"\n'
     )
     (project_dir / "main.py").write_text("print('hello v3')\n")
 
@@ -255,9 +251,7 @@ def test_main_check_fails_when_sha256_differs(tmp_path, monkeypatch, capsys):
     )
 
 
-def test_main_check_respects_configured_exclude_patterns(
-    tmp_path, monkeypatch, capsys
-):
+def test_main_check_respects_configured_exclude_patterns(tmp_path, monkeypatch, capsys):
     project_dir = tmp_path / "service"
     init_versioned_project(project_dir)
     (project_dir / "generated.txt").write_text("ignore me\n")
