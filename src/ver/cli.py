@@ -42,7 +42,7 @@ def init(args):
     Args:
         args.dir: 対象ディレクトリ。指定されていない場合、カレントディレクトリにフォールバックします
         args.name: プロジェクト名。省略した場合はディレクトリ名を使用します
-        args.version: バージョン生成とSHA-256ハッシュ計算を行うかどうか。省略した場合、version は "undefined"、sha256 は空文字になります
+        args.version: バージョン生成とSHA-256ハッシュ計算を行うかどうか
     """
     try:
         project_dir = Path.cwd() if args.dir is None else Path(args.dir)
@@ -52,7 +52,7 @@ def init(args):
         config_path = project_dir / VER_TOML
         doc = load_template()
         doc["name"] = args.name or project_dir.name
-        doc["version"] = next_version() if args.version else "undefined"
+        doc["version"] = next_version() if args.version else ""
         doc["sha256"] = (
             calculate_sha256(project_dir, resolve_exclude_patterns())
             if args.version
@@ -202,7 +202,7 @@ def main():
     init_parser.add_argument(
         "--version",
         action="store_true",
-        help='バージョン生成とSHA-256ハッシュ計算を行うかどうか。省略した場合、version は "undefined"、sha256 は空文字になります',
+        help="バージョン生成とSHA-256ハッシュ計算を行うかどうか",
     )
     init_parser.set_defaults(handler=init)
 

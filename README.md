@@ -93,7 +93,7 @@ uvx --from git+https://github.com/cosomil/ver@v0.0.1 ver init --version
 ```
 
 - `--version` を付けない場合
-  - バージョンは発行されません。コード編集のあとに、後述の`ver update`を実行してください
+  - `version` と `sha256` は設定されません。コード編集のあとに、後述の`ver update`を実行してください
 - `--version` を付ける場合
   - 現在時刻に基づく初期バージョンと、計算された `sha256` が設定されます
 

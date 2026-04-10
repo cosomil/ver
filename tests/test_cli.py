@@ -32,7 +32,7 @@ def test_main_init_creates_ver_toml_for_current_directory(
     config = read_config(tmp_path / "ver.toml")
     assert exc_info.value.code == 0
     assert config.name == tmp_path.name
-    assert config.version == "undefined"
+    assert config.version == ""
     assert config.sha256 == ""
     assert "作成されました" in capsys.readouterr().out
 
