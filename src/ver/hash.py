@@ -6,7 +6,7 @@ import re
 import subprocess
 from typing import Literal, Pattern, Sequence, assert_never
 
-from ver.config import VER_TOML
+from ver.project import PYPROJECT_TOML
 
 HashCalculationErrorReason = Literal[
     "not_git_worktree",
@@ -132,7 +132,7 @@ def calculate_sha256(
 ) -> str:
     """
     指定されたディレクトリ配下のgit管理ファイルと未追跡ファイルからSHA-256ハッシュを計算する。
-    ver.toml は常に計算対象から除外する。
+    pyproject.toml は常に計算対象から除外する。
     uv.lock は必ず計算対象となる。
     """
     root = Path(dir)
@@ -156,7 +156,7 @@ def calculate_sha256(
     ]
     files: list[tuple[str, Path | bytes]] = []
     for relative_path in candidate_files:
-        if relative_path == VER_TOML:
+        if relative_path == PYPROJECT_TOML:
             continue
 
         if relative_path != "uv.lock" and any(
