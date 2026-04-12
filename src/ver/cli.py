@@ -234,7 +234,7 @@ def check(args):
                 code=0,
             )
         raise exit(
-            "エラー: 整合していません\n"
+            'エラー: 整合していません。"ver update"によるバージョンアップが必要です\n'
             f'version = "{project.version}"\n'
             f'sha256 = "{recorded_sha256}"\n'
             f'actual_sha256 = "{current_sha256}"',

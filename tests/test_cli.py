@@ -395,7 +395,8 @@ def test_main_check_fails_when_sha256_differs(tmp_path, monkeypatch, capsys):
     assert exc_info.value.code == 1
     recalculated_sha256 = cli_module.calculate_sha256(project_dir, [])
     assert (
-        capsys.readouterr().err == "エラー: 整合していません\n"
+        capsys.readouterr().err
+        == 'エラー: 整合していません。"ver update"によるバージョンアップが必要です\n'
         'version = "2026.04.09.0"\n'
         'sha256 = "old"\n'
         f'actual_sha256 = "{recalculated_sha256}"\n'
