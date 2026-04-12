@@ -8,7 +8,7 @@ from tomlkit.items import Table
 from tomlkit.container import OutOfOrderTableProxy
 
 from ver.calver import next_version
-from ver.config import PYPROJECT_TOML, Project, read_head_project, read_project
+from ver.project import PYPROJECT_TOML, Project, read_head_project, read_project
 from ver.hash import HashCalculationError, calculate_sha256
 
 

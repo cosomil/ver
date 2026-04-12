@@ -5,7 +5,7 @@ import subprocess
 import pytest
 import ver.cli as cli_module
 from ver.cli import main
-from ver.config import read_project
+from ver.project import read_project
 
 
 def git(cwd: Path, *args: str) -> None:
