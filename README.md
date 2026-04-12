@@ -1,21 +1,21 @@
 # ver
 
-uv + Python で開発されるプロジェクト向けに、`pyproject.toml` を使って人間可読かつ厳密なバージョン管理を行うツールです。
+uv + Pythonで開発されるプロジェクトのために、人間可読かつ厳密なバージョン管理を行うための仕様と実装。
 
 ## バージョンのフォーマット
-[`CalVer`](https://calver.org/) を採用します。
+[`CalVer`](https://calver.org/) を採用し、バージョンと公開日を紐付けて管理します。
 
-- `2026.04.09.0`: 2026年4月9日に公開
-- `2026.04.10.0`: 2026年4月10日に公開
-- `2026.04.10.1`: 2026年4月10日に公開（2回目）
+- **`2026.04.09.0`**: 2026年4月9日に公開
+- **`2026.04.10.0`**: 2026年4月10日に公開
+- **`2026.04.10.1`**: 2026年4月10日に公開（2回目）
 
 ## `pyproject.toml` で管理する情報
-`ver` は以下のキーを利用します。
+`ver` は `pyproject.toml` の以下のキーを更新、追加します。
 
 - バージョン: `project.name`
 - バージョン文字列: `project.version`
 - ハッシュ値: `tool.ver.sha256`
-- ハッシュ除外パターン: `tool.ver.exclude_patterns`
+- ハッシュ計算の除外ファイル名パターン: `tool.ver.exclude_patterns`
 
 設定例:
 
@@ -24,22 +24,27 @@ uv + Python で開発されるプロジェクト向けに、`pyproject.toml` を
 name = "example"
 version = "2026.04.09.0"
 
-[tool.ver] # バージョン管理情報 (ref: https://github.com/cosomil/ver)
+[tool.ver]
 sha256 = "8f4f5d7d7a0f0c0d..."
 exclude_patterns = [
-  '^\\.[^/]+$',
+  '^\.[^/]+$',
   '^tests/',
-  '^(README\\.md|AGENTS\\.md|CLAUDE\\.md)$',
-  '^LICENSE\\.(txt|md|rst)$',
+  '^(README\.md|AGENTS\.md|CLAUDE\.md)$',
+  '^LICENSE\.(txt|md|rst)$',
 ]
 ```
 
-`ver init` が `DEFAULT_EXCLUDE_PATTERNS` を書き込むときは、TOML の基本文字列ではなくエスケープ不要のリテラル文字列として保存します。
+> [!TIP]
+> exclude_patternsの各パターンは正規表現で記述します。  
+> 上記の例ではTOMLのLiteral strings（シングルクォートを使用）としてパターンを記述しています。ダブルクォートを使用する際にはエスケープが必要になることに注意。
+>
+> Bad: `"^LICENSE\.(txt|md|rst)$"`  
+> Good: `"^LICENSE\\.(txt|md|rst)$"`
 
 ## ハッシュ計算の仕様
 `sha256` は git 管理ファイルと未追跡ファイルから計算されます。
 
-デフォルト除外パターン:
+デフォルトの除外ファイル名パターン:
 
 - `'^\.[^/]+$'`
 - `'^tests/'`
