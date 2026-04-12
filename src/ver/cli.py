@@ -1,11 +1,14 @@
 import argparse
 from pathlib import Path
 import sys
+from typing import Union
 
 import tomlkit
+from tomlkit.items import Table
+from tomlkit.container import OutOfOrderTableProxy
 
 from ver.calver import next_version
-from ver.config import Config, VER_TOML, read_config, read_head_config
+from ver.config import PYPROJECT_TOML, Project, read_head_project, read_project
 from ver.hash import HashCalculationError, calculate_sha256
 
 
@@ -17,12 +20,17 @@ DEFAULT_EXCLUDE_PATTERNS = (
 )
 
 
-def resolve_exclude_patterns(config: Config | None = None) -> tuple[str, ...]:
-    if config is None:
-        return DEFAULT_EXCLUDE_PATTERNS
-    if config.no_default_exclude_patterns:
-        return tuple(config.exclude_patterns)
-    return (*DEFAULT_EXCLUDE_PATTERNS, *config.exclude_patterns)
+TableLike = Union[Table, OutOfOrderTableProxy]
+
+
+def resolve_exclude_patterns(project: Project) -> tuple[str, ...]:
+    ver = project.get_tool_config("ver") or {}
+    exclude_patterns = ver.get("exclude_patterns", [])
+    if not isinstance(exclude_patterns, list) or not all(
+        isinstance(pattern, str) for pattern in exclude_patterns
+    ):
+        raise ValueError("tool.ver.exclude_patterns must be an array of strings")
+    return tuple(exclude_patterns)
 
 
 def exit(message: str, code: int = 1):
@@ -30,39 +38,91 @@ def exit(message: str, code: int = 1):
     return SystemExit(code)
 
 
-def load_template() -> tomlkit.TOMLDocument:
-    template_path = Path(__file__).with_name("template.toml")
-    return tomlkit.parse(template_path.read_text(encoding="utf-8"))
+def _resolve_project_dir(dir: str | None) -> Path:
+    project_dir = Path.cwd() if dir is None else Path(dir)
+    if not project_dir.is_dir():
+        raise NotADirectoryError(f"{project_dir} is not a directory")
+    return project_dir
+
+
+def _load_pyproject_document(project_dir: Path) -> tuple[Path, tomlkit.TOMLDocument]:
+    pyproject_path = project_dir / PYPROJECT_TOML
+    if not pyproject_path.is_file():
+        raise FileNotFoundError(pyproject_path)
+    return pyproject_path, tomlkit.parse(pyproject_path.read_text(encoding="utf-8"))
+
+
+def _require_table(parent: tomlkit.TOMLDocument | TableLike, key: str) -> TableLike:
+    value = parent.get(key)
+    if value is None:
+        value = tomlkit.table()
+        parent[key] = value
+    if not isinstance(value, (Table, OutOfOrderTableProxy)):
+        raise ValueError(f"{key} must be a table")
+    return value
+
+
+def _get_project_sha256(project: Project) -> str:
+    ver = project.get_tool_config("ver")
+    if ver is None:
+        raise ValueError("tool.ver が設定されていません")
+
+    sha256 = ver.get("sha256")
+    if not isinstance(sha256, str):
+        raise ValueError("tool.ver.sha256 が文字列で設定されていません")
+    return sha256
+
+
+def _prepare_pyproject(
+    doc: tomlkit.TOMLDocument, *, name: str, version: str, sha256: str
+) -> tomlkit.TOMLDocument:
+    project = _require_table(doc, "project")
+    tool = _require_table(doc, "tool")
+    ver = _require_table(tool, "ver")
+
+    project["name"] = name
+    project["version"] = version
+    ver["sha256"] = sha256
+    patterns = tomlkit.array()
+    patterns.multiline(True)
+    [
+        patterns.add_line(tomlkit.string(p, literal=True))
+        for p in DEFAULT_EXCLUDE_PATTERNS
+    ]
+    ver["exclude_patterns"] = patterns
+
+    return doc
 
 
 def init(args):
     """
-    ディレクトリに新しく"ver.toml"を作成します。
+    pyproject.toml に ver 用の設定を書き込みます。
 
     Args:
         args.dir: 対象ディレクトリ。指定されていない場合、カレントディレクトリにフォールバックします
         args.name: プロジェクト名。省略した場合はディレクトリ名を使用します
-        args.version: バージョン生成とSHA-256ハッシュ計算を行うかどうか
     """
     try:
-        project_dir = Path.cwd() if args.dir is None else Path(args.dir)
-        if not project_dir.is_dir():
-            raise NotADirectoryError(f"{project_dir} is not a directory")
-
-        config_path = project_dir / VER_TOML
-        doc = load_template()
-        doc["name"] = args.name or project_dir.name
-        doc["version"] = next_version() if args.version else ""
-        doc["sha256"] = (
-            calculate_sha256(project_dir, resolve_exclude_patterns())
-            if args.version
-            else ""
+        project_dir = _resolve_project_dir(args.dir)
+        pyproject_path, doc = _load_pyproject_document(project_dir)
+        version = next_version()
+        sha256 = calculate_sha256(project_dir, DEFAULT_EXCLUDE_PATTERNS)
+        _prepare_pyproject(
+            doc,
+            name=args.name or project_dir.name,
+            version=version,
+            sha256=sha256,
         )
-        with config_path.open("x", encoding="utf-8") as f:
-            tomlkit.dump(doc, f)
-        raise exit(f"作成されました: {config_path}", code=0)
-    except FileExistsError:
-        raise exit('エラー: "ver.toml"が既に存在しています', code=1)
+        pyproject_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+        raise exit(
+            f'初期化されました\nversion = "{version}"\nsha256 = "{sha256}"',
+            code=0,
+        )
+    except FileNotFoundError:
+        raise exit(
+            'エラー: "pyproject.toml"が見つかりません。先に "uv init" を実行してください',
+            code=1,
+        )
     except HashCalculationError as e:
         match e.reason:
             case "missing_uv_lock":
@@ -83,48 +143,50 @@ def init(args):
 
 def update(args):
     """
-    "ver.toml"のversionを更新し、sha256を再計算します。
-    ただし、sha256に変更がない場合は更新せずに終了します。
+    pyproject.toml の version を更新し、sha256 を再計算します。
+    ただし、sha256 に変更がない場合は更新せずに終了します。
 
     Args:
         args.dir: 対象ディレクトリ。指定されていない場合、カレントディレクトリにフォールバックします
     """
     try:
-        project_dir = Path.cwd() if args.dir is None else Path(args.dir)
-        if not project_dir.is_dir():
-            raise NotADirectoryError(f"{project_dir} is not a directory")
-
-        config_path = project_dir / VER_TOML
-        config = read_config(config_path)
+        project_dir = _resolve_project_dir(args.dir)
+        pyproject_path = project_dir / PYPROJECT_TOML
+        project = read_project(pyproject_path)
     except FileNotFoundError:
-        raise exit('エラー: "ver.toml"が見つかりません', code=1)
+        raise exit(
+            'エラー: "pyproject.toml"が見つかりません。先に "uv init" を実行してください',
+            code=1,
+        )
     except Exception as e:
         raise exit(f"エラーが発生しました: {e}", code=1)
 
     try:
-        current_sha256 = calculate_sha256(project_dir, resolve_exclude_patterns(config))
-        if config.sha256 == current_sha256:
+        current_sha256 = calculate_sha256(
+            project_dir, resolve_exclude_patterns(project)
+        )
+        recorded_sha256 = _get_project_sha256(project)
+        if recorded_sha256 == current_sha256:
             raise exit(
                 "更新はありません\n"
-                f'version = "{config.version}"\n'
-                f'sha256 = "{config.sha256}"',
+                f'version = "{project.version}"\n'
+                f'sha256 = "{recorded_sha256}"',
                 code=0,
             )
-        else:
-            head_config = read_head_config(config_path)
-            base_version = None if head_config is None else head_config.version
-            with config_path.open(encoding="utf-8") as f:
-                data = tomlkit.load(f)
-            data["version"] = next_version(base_version)
-            data["sha256"] = current_sha256
-            with config_path.open("w", encoding="utf-8") as f:
-                tomlkit.dump(data, f)
-            raise exit(
-                "更新されました\n"
-                f'version = "{data["version"]}"\n'
-                f'sha256 = "{data["sha256"]}"',
-                code=0,
-            )
+
+        head_project = read_head_project(pyproject_path)
+        base_version = None if head_project is None else head_project.version
+        _, doc = _load_pyproject_document(project_dir)
+        project_table = _require_table(doc, "project")
+        ver_table = _require_table(_require_table(doc, "tool"), "ver")
+        new_version = next_version(base_version)
+        project_table["version"] = new_version
+        ver_table["sha256"] = current_sha256
+        pyproject_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+        raise exit(
+            f'更新されました\nversion = "{new_version}"\nsha256 = "{current_sha256}"',
+            code=0,
+        )
     except HashCalculationError as e:
         match e.reason:
             case "missing_uv_lock":
@@ -145,35 +207,37 @@ def update(args):
 
 def check(args):
     """
-    "ver.toml"のversionとsha256が現在の状態と一致するかを確認します。
+    pyproject.toml の version と sha256 が現在の状態と一致するかを確認します。
     一致する場合は正常終了し、一致しない場合はエラー終了します。
 
     Args:
         args.dir: 対象ディレクトリ。指定されていない場合、カレントディレクトリにフォールバックします
     """
     try:
-        project_dir = Path.cwd() if args.dir is None else Path(args.dir)
-        if not project_dir.is_dir():
-            raise NotADirectoryError(f"{project_dir} is not a directory")
-
-        config_path = project_dir / VER_TOML
-        config = read_config(config_path)
-        current_sha256 = calculate_sha256(project_dir, resolve_exclude_patterns(config))
-        if config.sha256 == current_sha256:
+        project_dir = _resolve_project_dir(args.dir)
+        pyproject_path = project_dir / PYPROJECT_TOML
+        project = read_project(pyproject_path)
+        recorded_sha256 = _get_project_sha256(project)
+        current_sha256 = calculate_sha256(
+            project_dir, resolve_exclude_patterns(project)
+        )
+        if recorded_sha256 == current_sha256:
             raise exit(
-                f'version = "{config.version}"\nsha256 = "{config.sha256}"',
+                f'version = "{project.version}"\nsha256 = "{recorded_sha256}"',
                 code=0,
             )
-        else:
-            raise exit(
-                "エラー: 整合していません\n"
-                f'version = "{config.version}"\n'
-                f'sha256 = "{config.sha256}"\n'
-                f'actual_sha256 = "{current_sha256}"',
-                code=1,
-            )
+        raise exit(
+            "エラー: 整合していません\n"
+            f'version = "{project.version}"\n'
+            f'sha256 = "{recorded_sha256}"\n'
+            f'actual_sha256 = "{current_sha256}"',
+            code=1,
+        )
     except FileNotFoundError:
-        raise exit('エラー: "ver.toml"が見つかりません', code=1)
+        raise exit(
+            'エラー: "pyproject.toml"が見つかりません。先に "uv init" を実行してください',
+            code=1,
+        )
     except Exception as e:
         raise exit(f"エラーが発生しました: {e}", code=1)
 
@@ -186,9 +250,8 @@ def main():
     )
     s = p.add_subparsers()
 
-    # ver init [dir] --name NAME --version
     init_parser = s.add_parser(
-        "init", help='ディレクトリに新しく"ver.toml"を作成します'
+        "init", help="pyproject.toml に ver 用の設定を書き込みます"
     )
     init_parser.add_argument(
         "dir",
@@ -199,16 +262,10 @@ def main():
     init_parser.add_argument(
         "--name", help="プロジェクト名。省略した場合はディレクトリ名を使用します"
     )
-    init_parser.add_argument(
-        "--version",
-        action="store_true",
-        help="バージョン生成とSHA-256ハッシュ計算を行うかどうか",
-    )
     init_parser.set_defaults(handler=init)
 
-    # ver update [dir]
     update_parser = s.add_parser(
-        "update", help='"ver.toml"のversionを更新し、sha256を再計算します'
+        "update", help="pyproject.toml の version を更新し、sha256 を再計算します"
     )
     update_parser.add_argument(
         "dir",
@@ -218,9 +275,9 @@ def main():
     )
     update_parser.set_defaults(handler=update)
 
-    # ver check [dir]
     check_parser = s.add_parser(
-        "check", help='"ver.toml"のversionとsha256が現在の状態と一致するかを確認します'
+        "check",
+        help="pyproject.toml の version と sha256 が現在の状態と一致するかを確認します",
     )
     check_parser.add_argument(
         "dir",

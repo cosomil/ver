@@ -1,77 +1,93 @@
 from dataclasses import dataclass, field
-import os
 from pathlib import Path
+import os
 import subprocess
 import tomllib
 from typing import Any
 
 from ver.root import find_root_dir
 
-VER_TOML = "ver.toml"
-REQUIRED_FIELDS = ("name", "version", "sha256")
+PYPROJECT_TOML = "pyproject.toml"
 
 
-@dataclass(slots=True)
-class Config:
+@dataclass
+class Project:
     name: str
     version: str
-    sha256: str
-    exclude_patterns: list[str] = field(default_factory=list)
-    no_default_exclude_patterns: bool = False
-    meta: dict[str, Any] = field(default_factory=dict)
+    tool: dict[str, Any] = field(default_factory=dict)
+
+    def get_tool_config(self, name: str) -> dict[str, Any] | None:
+        value = self.tool.get(name)
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ValueError(f"tool.{name} must be a table")
+        return value
 
 
-def _resolve_config_path(path: str | Path | None = None) -> Path:
+def _resolve_project_path(path: str | Path | None = None) -> Path:
     if path is None:
-        return find_root_dir() / VER_TOML
+        return find_root_dir() / PYPROJECT_TOML
 
     path = Path(path)
     if path.is_dir():
-        return path / VER_TOML
+        return path / PYPROJECT_TOML
 
     return path
 
 
-def _config_from_data(data: dict[str, Any], path: Path) -> Config:
-    missing_fields = [field for field in REQUIRED_FIELDS if field not in data]
-    if missing_fields:
-        missing = ", ".join(missing_fields)
-        raise ValueError(f"Missing required fields in {path}: {missing}")
-
-    exclude_patterns = data.get("exclude_patterns", [])
-    if not isinstance(exclude_patterns, list) or not all(
-        isinstance(pattern, str) for pattern in exclude_patterns
-    ):
-        raise ValueError(f"exclude_patterns in {path} must be an array of strings")
-
-    no_default_exclude_patterns = data.get("no_default_exclude_patterns", False)
-    if not isinstance(no_default_exclude_patterns, bool):
-        raise ValueError(f"no_default_exclude_patterns in {path} must be a boolean")
-
-    # metaはdictでないと
-    meta = data.get("meta", {})
-    if not isinstance(meta, dict):
-        raise ValueError(f"meta in {path} must be a table")
-
-    return Config(
-        name=data["name"],
-        version=data["version"],
-        sha256=data["sha256"],
-        exclude_patterns=exclude_patterns,
-        no_default_exclude_patterns=no_default_exclude_patterns,
-        meta=meta,
-    )
+def _require_table(data: dict[str, Any], key: str, path: Path) -> dict[str, Any]:
+    value = data.get(key)
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} in {path} must be a table")
+    return value
 
 
-def read_config(path: str | Path | None = None) -> Config:
-    resolved = _resolve_config_path(path)
+def _project_from_data(data: dict[str, Any], path: Path) -> Project:
+    project = _require_table(data, "project", path)
+
+    name = project.get("name")
+    if not isinstance(name, str):
+        raise ValueError(f"project.name in {path} must be a string")
+
+    version = project.get("version")
+    if not isinstance(version, str):
+        raise ValueError(f"project.version in {path} must be a string")
+
+    tool = data.get("tool", {})
+    if not isinstance(tool, dict):
+        raise ValueError(f"tool in {path} must be a table")
+
+    ver = tool.get("ver")
+    if ver is not None:
+        if not isinstance(ver, dict):
+            raise ValueError(f"tool.ver in {path} must be a table")
+
+        sha256 = ver.get("sha256")
+        if sha256 is not None and not isinstance(sha256, str):
+            raise ValueError(f"tool.ver.sha256 in {path} must be a string")
+
+        exclude_patterns = ver.get("exclude_patterns")
+        if exclude_patterns is not None and (
+            not isinstance(exclude_patterns, list)
+            or not all(isinstance(pattern, str) for pattern in exclude_patterns)
+        ):
+            raise ValueError(
+                f"tool.ver.exclude_patterns in {path} must be an array of strings"
+            )
+
+    return Project(name=name, version=version, tool=tool)
+
+
+def read_project(path: str | Path | None = None) -> Project:
+    resolved = _resolve_project_path(path)
     with resolved.open("rb") as f:
         data = tomllib.load(f)
-    return _config_from_data(data, resolved)
+    return _project_from_data(data, resolved)
 
 
-def read_head_config(path: str | Path | None = None) -> Config | None:
-    resolved = _resolve_config_path(path)
+def read_head_project(path: str | Path | None = None) -> Project | None:
+    resolved = _resolve_project_path(path)
 
     try:
         completed = subprocess.run(
@@ -106,4 +122,4 @@ def read_head_config(path: str | Path | None = None) -> Config | None:
         capture_output=True,
     )
     data = tomllib.loads(os.fsdecode(completed.stdout))
-    return _config_from_data(data, resolved)
+    return _project_from_data(data, resolved)

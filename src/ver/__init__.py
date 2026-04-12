@@ -1,6 +1,6 @@
-from ver.config import Config, read_config
+from ver.config import Project, read_project
 
 __all__ = [
-    "Config",
-    "read_config",
+    "Project",
+    "read_project",
 ]

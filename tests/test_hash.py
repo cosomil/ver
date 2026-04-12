@@ -95,13 +95,13 @@ def test_calculate_sha256_respects_exclude_patterns_but_keeps_uv_lock(tmp_path: 
     assert calculate_sha256(root, [r"^assets/", r"^uv\.lock$"]) == expected.hexdigest()
 
 
-def test_calculate_sha256_always_excludes_ver_toml(tmp_path: Path):
+def test_calculate_sha256_always_excludes_pyproject_toml(tmp_path: Path):
     root = tmp_path / "project"
     init_git_repo(root)
     (root / "a.py").write_text("print('a')\n")
-    (root / "ver.toml").write_text('name = "api"\n')
+    (root / "pyproject.toml").write_text('[project]\nname = "api"\nversion = "0.1.0"\n')
     (root / "uv.lock").write_text("lock-content\n")
-    git(root, "add", "--", "a.py", "ver.toml", "uv.lock")
+    git(root, "add", "--", "a.py", "pyproject.toml", "uv.lock")
 
     expected = hashlib.sha256()
     for relative_path in ["a.py", "uv.lock"]:

@@ -1,94 +1,94 @@
 import pytest
 
-from ver.config import Config, read_config
+from ver.config import Project, read_project
 
 
-def test_read_config_accepts_ver_toml_path(tmp_path):
-    config_path = tmp_path / "ver.toml"
+def test_read_project_accepts_pyproject_path(tmp_path):
+    config_path = tmp_path / "pyproject.toml"
     config_path.write_text(
-        'name = "example"\nversion = "2026.04.09.0"\nsha256 = "abc123"\n'
+        '[project]\nname = "example"\nversion = "2026.04.09.0"\n'
+        '\n[tool.ver]\nsha256 = "abc123"\n'
     )
 
-    config = read_config(config_path)
+    project = read_project(config_path)
 
-    assert config.name == "example"
-    assert config.version == "2026.04.09.0"
-    assert config.sha256 == "abc123"
-    assert config.meta == {}
+    assert project.name == "example"
+    assert project.version == "2026.04.09.0"
+    assert project.get_tool_config("ver") == {"sha256": "abc123"}
 
 
-def test_read_config_reads_ver_toml_from_directory(tmp_path):
+def test_read_project_reads_pyproject_from_directory(tmp_path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    (project_dir / "ver.toml").write_text(
-        'name = "example"\nversion = "2026.04.09.1"\nsha256 = "def456"\n'
+    (project_dir / "pyproject.toml").write_text(
+        '[project]\nname = "example"\nversion = "2026.04.09.1"\n'
     )
 
-    config = read_config(project_dir)
+    project = read_project(project_dir)
 
-    assert config.name == "example"
-    assert config.version == "2026.04.09.1"
-    assert config.sha256 == "def456"
+    assert project.name == "example"
+    assert project.version == "2026.04.09.1"
 
 
-def test_read_config_reads_optional_exclude_settings(tmp_path):
-    config_path = tmp_path / "ver.toml"
+def test_read_project_reads_tool_ver_settings(tmp_path):
+    config_path = tmp_path / "pyproject.toml"
     config_path.write_text(
-        'name = "example"\n'
-        'version = "2026.04.09.0"\n'
+        '[project]\nname = "example"\nversion = "2026.04.09.0"\n'
+        "\n[tool.ver]\n"
         'sha256 = "abc123"\n'
         'exclude_patterns = ["^dist/", "^coverage\\\\.xml$"]\n'
-        "no_default_exclude_patterns = true\n"
     )
 
-    config = read_config(config_path)
+    project = read_project(config_path)
 
-    assert config.exclude_patterns == ["^dist/", "^coverage\\.xml$"]
-    assert config.no_default_exclude_patterns is True
+    assert project.get_tool_config("ver") == {
+        "sha256": "abc123",
+        "exclude_patterns": ["^dist/", "^coverage\\.xml$"],
+    }
 
 
-def test_read_config_ignores_unknown_top_level_keys(tmp_path):
-    config_path = tmp_path / "ver.toml"
+def test_read_project_ignores_unknown_top_level_keys(tmp_path):
+    config_path = tmp_path / "pyproject.toml"
     config_path.write_text(
-        'name = "example"\n'
-        'version = "2026.04.09.0"\n'
-        'sha256 = "abc123"\n'
-        'extra = "ignored"\n'
+        '[project]\nname = "example"\nversion = "2026.04.09.0"\n'
+        '\n[tool.foo]\nvalue = "ignored"\n'
     )
 
-    config = read_config(config_path)
+    project = read_project(config_path)
 
-    assert config == Config(name="example", version="2026.04.09.0", sha256="abc123")
-
-
-def test_read_config_raises_when_required_field_is_missing(tmp_path):
-    config_path = tmp_path / "ver.toml"
-    config_path.write_text('name = "example"\nversion = "2026.04.09.0"\n')
-
-    with pytest.raises(ValueError, match=r"Missing required fields .*: sha256"):
-        read_config(config_path)
+    assert project == Project(
+        name="example",
+        version="2026.04.09.0",
+        tool={"foo": {"value": "ignored"}},
+    )
 
 
-def test_read_config_reports_multiple_missing_required_fields(tmp_path):
-    config_path = tmp_path / "ver.toml"
-    config_path.write_text('name = "example"\n')
+def test_read_project_raises_when_project_table_is_missing(tmp_path):
+    config_path = tmp_path / "pyproject.toml"
+    config_path.write_text('[tool.ver]\nsha256 = "abc123"\n')
 
-    with pytest.raises(
-        ValueError, match=r"Missing required fields .*: version, sha256"
-    ):
-        read_config(config_path)
+    with pytest.raises(ValueError, match=r"project in .* must be a table"):
+        read_project(config_path)
 
 
-def test_read_config_validates_optional_exclude_settings(tmp_path):
-    config_path = tmp_path / "ver.toml"
+def test_read_project_raises_when_project_version_is_missing(tmp_path):
+    config_path = tmp_path / "pyproject.toml"
+    config_path.write_text('[project]\nname = "example"\n')
+
+    with pytest.raises(ValueError, match=r"project.version .* must be a string"):
+        read_project(config_path)
+
+
+def test_read_project_validates_tool_ver_exclude_patterns(tmp_path):
+    config_path = tmp_path / "pyproject.toml"
     config_path.write_text(
-        'name = "example"\n'
-        'version = "2026.04.09.0"\n'
+        '[project]\nname = "example"\nversion = "2026.04.09.0"\n'
+        "\n[tool.ver]\n"
         'sha256 = "abc123"\n'
         "exclude_patterns = [1]\n"
     )
 
     with pytest.raises(
-        ValueError, match=r"exclude_patterns .* must be an array of strings"
+        ValueError, match=r"tool\.ver\.exclude_patterns .* must be an array of strings"
     ):
-        read_config(config_path)
+        read_project(config_path)
