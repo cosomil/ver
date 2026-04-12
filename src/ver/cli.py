@@ -62,10 +62,10 @@ def _require_table(parent: tomlkit.TOMLDocument | TableLike, key: str) -> TableL
     return value
 
 
-def _get_project_sha256(project: Project) -> str:
+def _get_project_sha256(project: Project) -> str | None:
     ver = project.get_tool_config("ver")
     if ver is None:
-        raise ValueError("tool.ver が設定されていません")
+        return None
 
     sha256 = ver.get("sha256")
     if not isinstance(sha256, str):
@@ -166,6 +166,11 @@ def update(args):
             project_dir, resolve_exclude_patterns(project)
         )
         recorded_sha256 = _get_project_sha256(project)
+        if recorded_sha256 is None:
+            raise exit(
+                'エラー: "tool.ver" が設定されていません。先に "ver init" を実行してください',
+                code=1,
+            )
         if recorded_sha256 == current_sha256:
             raise exit(
                 "更新はありません\n"

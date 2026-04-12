@@ -20,10 +20,7 @@ def write_pyproject(
     extra: str = "",
 ) -> None:
     (project_dir / "pyproject.toml").write_text(
-        '[project]\n'
-        f'name = "{name}"\n'
-        f'version = "{version}"\n'
-        f"{extra}",
+        f'[project]\nname = "{name}"\nversion = "{version}"\n{extra}',
         encoding="utf-8",
     )
 
@@ -37,7 +34,9 @@ def init_versioned_project(project_dir: Path) -> None:
     git(project_dir, "add", "--", "main.py", "uv.lock", "pyproject.toml")
 
 
-def test_main_init_updates_pyproject_for_current_directory(tmp_path, monkeypatch, capsys):
+def test_main_init_updates_pyproject_for_current_directory(
+    tmp_path, monkeypatch, capsys
+):
     write_pyproject(tmp_path)
     (tmp_path / "main.py").write_text("print('hello')\n")
     (tmp_path / "uv.lock").write_text("lock-content\n")
@@ -89,7 +88,9 @@ def test_main_init_generates_version_and_hash(tmp_path, monkeypatch):
     assert exc_info.value.code == 0
 
 
-def test_main_init_writes_default_exclude_patterns_as_literal_strings(tmp_path, monkeypatch):
+def test_main_init_writes_default_exclude_patterns_as_literal_strings(
+    tmp_path, monkeypatch
+):
     project_dir = tmp_path / "service"
     init_versioned_project(project_dir)
     monkeypatch.setattr(cli_module, "next_version", lambda: "2026.04.09.0")
@@ -170,7 +171,9 @@ def test_main_update_updates_existing_pyproject(tmp_path, monkeypatch, capsys):
     )
 
 
-def test_main_update_preserves_comments_and_unrelated_tool_tables(tmp_path, monkeypatch):
+def test_main_update_preserves_comments_and_unrelated_tool_tables(
+    tmp_path, monkeypatch
+):
     project_dir = tmp_path / "service"
     init_versioned_project(project_dir)
     config_path = project_dir / "pyproject.toml"
@@ -183,7 +186,7 @@ def test_main_update_preserves_comments_and_unrelated_tool_tables(tmp_path, monk
         "[tool.ver]\n"
         "# keep this comment\n"
         'sha256 = "old"\n'
-        'exclude_patterns = []\n'
+        "exclude_patterns = []\n"
         "\n"
         "[tool.foo]\n"
         'owner = "user"\n',
@@ -248,7 +251,7 @@ def test_main_update_exits_without_changes_when_sha256_is_unchanged(
     config_path = project_dir / "pyproject.toml"
     original = (
         '[project]\nname = "api"\nversion = "2026.04.09.0"\n'
-        '\n[tool.ver]\n'
+        "\n[tool.ver]\n"
         f'sha256 = "{sha256}"\n'
         "exclude_patterns = []\n"
     )
@@ -281,7 +284,7 @@ def test_main_update_uses_head_version_when_pyproject_has_uncommitted_changes(
     head_sha256 = cli_module.calculate_sha256(project_dir, [])
     config_path.write_text(
         '[project]\nname = "api"\nversion = "2026.04.09.0"\n'
-        '\n[tool.ver]\n'
+        "\n[tool.ver]\n"
         f'sha256 = "{head_sha256}"\n'
         "exclude_patterns = []\n",
         encoding="utf-8",
@@ -302,7 +305,7 @@ def test_main_update_uses_head_version_when_pyproject_has_uncommitted_changes(
     stale_sha256 = cli_module.calculate_sha256(project_dir, [])
     config_path.write_text(
         '[project]\nname = "api"\nversion = "2026.04.09.1"\n'
-        '\n[tool.ver]\n'
+        "\n[tool.ver]\n"
         f'sha256 = "{stale_sha256}"\n'
         "exclude_patterns = []\n",
         encoding="utf-8",
@@ -330,6 +333,28 @@ def test_main_update_uses_head_version_when_pyproject_has_uncommitted_changes(
         capsys.readouterr().out == "更新されました\n"
         'version = "2026.04.09.1"\n'
         f'sha256 = "{expected_sha256}"\n'
+    )
+
+
+def test_main_update_prompts_init_when_tool_ver_is_missing(
+    tmp_path, monkeypatch, capsys
+):
+    project_dir = tmp_path / "service"
+    init_versioned_project(project_dir)
+    write_pyproject(
+        project_dir,
+        name="api",
+        version="2026.04.09.0",
+    )
+    monkeypatch.setattr(sys, "argv", ["ver", "update", str(project_dir)])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 1
+    assert (
+        capsys.readouterr().err
+        == 'エラー: "tool.ver" が設定されていません。先に "ver init" を実行してください\n'
     )
 
 
@@ -387,7 +412,7 @@ def test_main_check_respects_configured_exclude_patterns(tmp_path, monkeypatch, 
         name="api",
         version="2026.04.09.0",
         extra=(
-            '\n[tool.ver]\n'
+            "\n[tool.ver]\n"
             f'sha256 = "{sha256}"\n'
             'exclude_patterns = ["^generated\\\\.txt$"]\n'
         ),
