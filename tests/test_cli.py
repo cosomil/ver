@@ -101,6 +101,7 @@ def test_main_init_writes_default_exclude_patterns_as_literal_strings(
 
     text = (project_dir / "pyproject.toml").read_text(encoding="utf-8")
     assert exc_info.value.code == 0
+    assert f"[tool.ver] {cli_module.VER_TOOL_COMMENT}\n" in text
     assert "exclude_patterns = [\n" in text
     assert "    '^\\.[^/]+$',\n" in text
     assert "    '^tests/',\n" in text

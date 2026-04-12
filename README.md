@@ -24,7 +24,7 @@ uv + Python で開発されるプロジェクト向けに、`pyproject.toml` を
 name = "example"
 version = "2026.04.09.0"
 
-[tool.ver]
+[tool.ver] # バージョン管理情報 (ref: https://github.com/cosomil/ver)
 sha256 = "8f4f5d7d7a0f0c0d..."
 exclude_patterns = [
   '^\\.[^/]+$',

@@ -18,6 +18,7 @@ DEFAULT_EXCLUDE_PATTERNS = (
     r"^(README\.md|AGENTS\.md|CLAUDE\.md)$",
     r"^LICENSE\.(txt|md|rst)$",
 )
+VER_TOOL_COMMENT = "# バージョン管理情報 (ref: https://github.com/cosomil/ver)"
 
 
 TableLike = Union[Table, OutOfOrderTableProxy]
@@ -56,6 +57,7 @@ def _require_table(parent: tomlkit.TOMLDocument | TableLike, key: str) -> TableL
     value = parent.get(key)
     if value is None:
         value = tomlkit.table()
+        value.comment(VER_TOOL_COMMENT)
         parent[key] = value
     if not isinstance(value, (Table, OutOfOrderTableProxy)):
         raise ValueError(f"{key} must be a table")
