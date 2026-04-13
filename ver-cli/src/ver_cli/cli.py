@@ -4,12 +4,12 @@ import sys
 from typing import Union
 
 import tomlkit
+from ver import PYPROJECT_TOML, Project, read_head_project, read_project
 from tomlkit.items import Table
 from tomlkit.container import OutOfOrderTableProxy
 
-from ver.calver import next_version
-from ver.project import PYPROJECT_TOML, Project, read_head_project, read_project
-from ver.hash import HashCalculationError, calculate_sha256
+from ver_cli.calver import next_version
+from ver_cli.hash import HashCalculationError, calculate_sha256
 
 
 DEFAULT_EXCLUDE_PATTERNS = (

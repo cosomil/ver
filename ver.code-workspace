@@ -1,0 +1,16 @@
+{
+  "folders": [
+    {
+      "name": "ver",
+      "path": "."
+    },
+    {
+      "name": "ver-cli",
+      "path": "ver-cli"
+    },
+    {
+      "name": "ver-lib",
+      "path": "ver"
+    }
+  ]
+}

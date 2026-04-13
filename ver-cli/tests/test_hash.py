@@ -3,9 +3,9 @@ from pathlib import Path
 import subprocess
 
 import pytest
-import ver.hash as hash_module
+import ver_cli.hash as hash_module
 
-from ver.hash import HashCalculationError, calculate_sha256
+from ver_cli.hash import HashCalculationError, calculate_sha256
 
 
 def git(cwd: Path, *args: str) -> None:
@@ -43,7 +43,13 @@ def test_calculate_sha256_hashes_tracked_and_untracked_files(tmp_path: Path):
     git(root, "add", "--", "a.py", "nested/b.txt", "README.md", "uv.lock")
 
     expected = hashlib.sha256()
-    for relative_path in ["README.md", "a.py", "ignored.txt", "nested/b.txt", "uv.lock"]:
+    for relative_path in [
+        "README.md",
+        "a.py",
+        "ignored.txt",
+        "nested/b.txt",
+        "uv.lock",
+    ]:
         expected.update(relative_path.encode())
         expected.update(b"\0")
         expected.update((root / relative_path).read_bytes())
@@ -323,7 +329,9 @@ def test_calculate_sha256_requires_git_worktree(tmp_path: Path):
     (root / "a.py").write_text("print('a')\n")
     (root / "uv.lock").write_text("lock-content\n")
 
-    with pytest.raises(HashCalculationError, match=r"is not inside a git worktree") as exc_info:
+    with pytest.raises(
+        HashCalculationError, match=r"is not inside a git worktree"
+    ) as exc_info:
         calculate_sha256(root)
     assert exc_info.value.reason == "not_git_worktree"
 

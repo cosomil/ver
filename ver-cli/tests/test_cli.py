@@ -3,9 +3,9 @@ from pathlib import Path
 import subprocess
 
 import pytest
-import ver.cli as cli_module
-from ver.cli import main
-from ver.project import read_project
+from ver import read_project
+import ver_cli.cli as cli_module
+from ver_cli.cli import main
 
 
 def git(cwd: Path, *args: str) -> None:

@@ -1,6 +1,6 @@
 import pytest
 
-from ver.project import Project, read_project
+from ver import Project, read_project
 
 
 def test_read_project_accepts_pyproject_path(tmp_path):
