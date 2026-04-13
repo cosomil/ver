@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 
-import ver.calver as calver
+import ver_cli.calver as calver
 
 
 class FrozenDateTime(datetime):

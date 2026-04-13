@@ -5,8 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 from typing import Literal, Pattern, Sequence, assert_never
-
-from ver.project import PYPROJECT_TOML
+from ver import PYPROJECT_TOML
 
 HashCalculationErrorReason = Literal[
     "not_git_worktree",

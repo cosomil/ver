@@ -5,8 +5,6 @@ import subprocess
 import tomllib
 from typing import Any
 
-from ver.root import find_root_dir
-
 PYPROJECT_TOML = "pyproject.toml"
 
 
@@ -23,6 +21,15 @@ class Project:
         if not isinstance(value, dict):
             raise ValueError(f"tool.{name} must be a table")
         return value
+
+
+def find_root_dir() -> Path:
+    current_dir = Path.cwd()
+    while current_dir != current_dir.parent:
+        if (current_dir / PYPROJECT_TOML).exists():
+            return current_dir
+        current_dir = current_dir.parent
+    raise FileNotFoundError("Could not find pyproject.toml in any parent directory.")
 
 
 def _resolve_project_path(path: str | Path | None = None) -> Path:
