@@ -67,9 +67,9 @@ exclude_patterns = [
 対象ディレクトリの `pyproject.toml` を初期化します。`pyproject.toml` が存在しない場合はエラーとなります。
 
 ```shell
-uvx --from git+https://github.com/cosomil/ver@v0.0.1 ver init
-uvx --from git+https://github.com/cosomil/ver@v0.0.1 ver init path/to/project
-uvx --from git+https://github.com/cosomil/ver@v0.0.1 ver init --name example
+uvx --from "git+https://github.com/cosomil/ver@v0.0.1#subdirectory=ver-cli" ver init
+uvx --from "git+https://github.com/cosomil/ver@v0.0.1#subdirectory=ver-cli" ver init path/to/project
+uvx --from "git+https://github.com/cosomil/ver@v0.0.1#subdirectory=ver-cli" ver init --name example
 ```
 
 - `project.name` をディレクトリ名、または `--name` で指定した値に更新します
@@ -81,22 +81,22 @@ uvx --from git+https://github.com/cosomil/ver@v0.0.1 ver init --name example
 現在の作業ツリーからハッシュを再計算し、`tool.ver.sha256` と異なる場合のみ `project.version` と `tool.ver.sha256` を更新します。
 
 ```shell
-uvx --from git+https://github.com/cosomil/ver@v0.0.1 ver update
-uvx --from git+https://github.com/cosomil/ver@v0.0.1 ver update path/to/project
+uvx --from "git+https://github.com/cosomil/ver@v0.0.1#subdirectory=ver-cli" ver update
+uvx --from "git+https://github.com/cosomil/ver@v0.0.1#subdirectory=ver-cli" ver update path/to/project
 ```
 
 ### `ver check`
 現在の作業ツリーからハッシュを再計算し、`project.version` と `tool.ver.sha256` が整合しているか検証します。
 
 ```shell
-uvx --from git+https://github.com/cosomil/ver@v0.0.1 ver check
-uvx --from git+https://github.com/cosomil/ver@v0.0.1 ver check path/to/project
+uvx --from "git+https://github.com/cosomil/ver@v0.0.1#subdirectory=ver-cli" ver check
+uvx --from "git+https://github.com/cosomil/ver@v0.0.1#subdirectory=ver-cli" ver check path/to/project
 ```
 
 ## ライブラリ API
 
 ```shell
-uv add git+https://github.com/cosomil/ver --tag v0.0.1
+uv add "git+https://github.com/cosomil/ver@v0.0.1#subdirectory=ver"
 ```
 
 ```python
